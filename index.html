@@ -1,0 +1,146 @@
+<!--TODO-->
+<!--1. Add support for entering your rdio username or userKey-->
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="$views/css/image.css">
+        <link rel="stylesheet" href="$views/css/list.css">
+        <link rel="stylesheet" href="$views/css/buttons.css">
+        <link rel="stylesheet" href="css/main.css">
+        <link rel="stylesheet" href="css/grid.css">
+        <script src="js/jquery-2.1.0.min.js"></script>
+        <script>
+          function resize() {
+            var offset = Math.floor((window.innerWidth - 20) / 190);
+            var container = document.getElementById('container');
+            container.style.width = offset * 190 + 'px';
+            container.style.margin = '0 auto';
+            container.style.paddingTop = '10px';
+
+            window.onresize = resize;
+          }
+        </script>
+    </head>
+    <body>
+
+    <div id="wrapper">
+      <div id="heavyRotationFriendsSection" class="section">
+        <h1>Rdio - Heavy Rotation (Friends)</h1>
+      </div>
+
+      <div id="heavyRotationAllSection" class="section">
+        <h1>Rdio - Heavy Rotation (All)</h1>
+      </div>
+
+      <div id="topChartsSection" class="section">
+        <h1>Rdio - Top Charts</h1>
+      </div>
+
+      <div id="newReleasesSection" class="section">
+        <h1>Rdio - New Releases</h1>
+      </div>
+
+      <div id="container">
+        <ul id="the_grid"></ul>
+      </div>
+    </div>
+
+<script>
+  if (!String.prototype.endsWith) {
+    Object.defineProperty(String.prototype, 'endsWith', {
+      enumerable: false,
+      configurable: false,
+      writable: false,
+      value: function (searchString, position) {
+        position = position || this.length;
+        position = position - searchString.length;
+        var lastIndex = this.lastIndexOf(searchString);
+        return lastIndex !== -1 && lastIndex === position;
+      }
+    });
+  }
+
+  require(['$api/search#Search','$api/models','$views/image#Image'], function(Search, models, Image) {
+
+    var stripWords = ["(Deluxe)", "(Deluxe Version)"];
+    var rdioProxyBaseUrl = "http://rdioproxy.herokuapp.com/?";
+
+    function tabs() {
+      var args = models.application.arguments;
+
+      $("#the_grid").empty();  //clear out any previous DOM elements
+
+      //Default case - index
+      var apiCall = rdioProxyBaseUrl;
+
+
+      //hide all the sections
+      $('.section').hide();
+
+      if(args && args[0] && args[0] == "heavyRotationAll"){
+        apiCall += "type=albums&count=50";
+        $('#heavyRotationAllSection').show();
+      } else if(args && args[0] && args[0] == "topCharts"){
+        apiCall += "apiCall=getTopCharts&type=albums&count=50";
+        $('#topChartsSection').show();
+      } else if(args && args[0] && args[0] == "newReleases"){
+        apiCall += "apiCall=getNewReleases&count=50";
+        $('#newReleasesSection').show();
+      } else {
+        //Default case - index - Heavy Rotation (Friends)
+        apiCall += "type=albums&count=50&friends=true";
+        $('#heavyRotationFriendsSection').show();
+      }
+
+      //var apiCall = "http://localhost:5000/?type=albums&count=50&friends=true";
+      $.getJSON( apiCall )
+        .done(function( json ) {
+          json.result.forEach(function(elem){
+            var artistAlbumName = elem.artist + " " + elem.name;
+
+            stripWords.forEach(function(elem){
+              if(artistAlbumName.endsWith(elem)){
+                artistAlbumName = artistAlbumName.replace(elem,""); //remove the unwanted string
+              }
+            });
+
+            var mySearch = Search.search(artistAlbumName);
+            var maxResults = 1;  //TODO tweak maxResults to a higher number, show multiple albums?
+
+            mySearch.albums.snapshot(0, maxResults).done(function(a){
+              if(a.range.length > 0){
+                var album = models.Album.fromURI(a.get(0).uri);
+                var image = Image.forAlbum(album, {width: 200, height: 200});
+                $("#the_grid").append(
+                  $('<li/>').append(
+                    $('<div class="figure"/>').append(
+                      $("<a href='" + a.get(0).uri +"' />").html(image.node),
+                      $('<div class="name"><a class="name_link" href="' + a.get(0).uri + '">' + a.get(0).name + '</a></div>'),
+                      $('<div class="artist"><a class="artist_link" href="' + a.get(0).uri + '">' + elem.artist + '</a></div>')
+                    )
+                  )
+                );
+              }
+            });
+          });
+
+          resize();
+        })
+        .fail(function( jqxhr, textStatus, error ) {
+          var err = textStatus + ", " + error;
+          console.log( "Request Failed: " + err );
+        });
+
+    }
+
+    // When application has loaded, run pages function
+    models.application.load('arguments').done(tabs);
+
+    // When arguments change, run pages function
+    models.application.addEventListener('arguments', tabs);
+  });
+</script>
+
+    </body>
+</html>
